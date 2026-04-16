@@ -1,0 +1,25 @@
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { WebsocketGateway } from './websocket.gateway';
+import { PrismaModule } from '../common/prisma/prisma.module';
+import { MapsModule } from '../common/maps/maps.module';
+
+@Module({
+  imports: [
+    ConfigModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET'),
+        signOptions: { expiresIn: '1h' },
+      }),
+      inject: [ConfigService],
+    }),
+    PrismaModule,
+    MapsModule,
+  ],
+  providers: [WebsocketGateway],
+  exports: [WebsocketGateway],
+})
+export class WebsocketModule {}

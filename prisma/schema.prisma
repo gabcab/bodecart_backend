@@ -1,0 +1,731 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                           String                   @id @default(uuid())
+  email                        String                   @unique
+  password                     String?
+  roles                        UserRole[]
+  status                       UserStatus               @default(PENDING_VERIFICATION)
+  firstName                    String
+  lastName                     String
+  phone                        String?
+  avatar                       String?
+  authProvider                 AuthProvider             @default(LOCAL)
+  googleId                     String?                  @unique
+  createdAt                    DateTime                 @default(now())
+  updatedAt                    DateTime                 @updatedAt
+  lastLogin                    DateTime?
+  reviewedBodegaDocuments      BodegaDocument[]         @relation("BodegaDocumentReviewer")
+  reviewedDeliveryDocuments    DeliveryPersonDocument[] @relation("DeliveryDocumentReviewer")
+  bodegaOwner                  BodegaOwner?
+  client                       Client?
+  deliveryPerson               DeliveryPerson?
+  notifications                Notification[]
+  notificationDevices          NotificationDevice[]
+  refreshTokens                RefreshToken[]
+
+  @@index([email])
+  @@index([roles])
+  @@map("users")
+}
+
+model NotificationDevice {
+  id         String   @id @default(uuid())
+  userId     String
+  token      String   @unique
+  platform   String
+  appType    String   @default("CLIENT")
+  locale     String   @default("es")
+  isActive   Boolean  @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([appType])
+  @@map("notification_devices")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Client {
+  id                     String     @id @default(uuid())
+  userId                 String     @unique
+  stripeCustomerId       String?    @unique
+  defaultPaymentMethodId String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+  addresses              Address[]
+  user                   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  favorites              Favorite[]
+  orders                 Order[]
+  reviews                Review[]
+
+  @@index([stripeCustomerId])
+  @@map("clients")
+}
+
+model Address {
+  id           String   @id @default(uuid())
+  clientId     String
+  label        String
+  street       String
+  apartment    String?
+  city         String
+  state        String
+  zipCode      String
+  country      String   @default("USA")
+  latitude     Float    @default(0)
+  longitude    Float    @default(0)
+  instructions String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  orders       Order[]
+
+  @@index([clientId])
+  @@map("addresses")
+}
+
+model BodegaOwner {
+  id                       String              @id @default(uuid())
+  userId                   String              @unique
+  businessName             String?
+  taxId                    String?
+  paypalEmail              String?
+  stripeAccountId          String?
+  stripeConnectStatus      StripeConnectStatus @default(NOT_CONNECTED)
+  stripeOnboardingComplete Boolean             @default(false)
+  bankAccount              String?
+  preferredPayoutMethod    PayoutMethod        @default(STRIPE)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+  user                     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bodegas                  Bodega[]
+  earnings                 Earning[]
+  payouts                  Payout[]
+
+  @@map("bodega_owners")
+}
+
+model Bodega {
+  id           String           @id @default(uuid())
+  ownerId      String
+  name         String
+  description  String?
+  phone        String
+  email        String?
+  street       String
+  city         String
+  state        String
+  zipCode      String
+  country      String           @default("USA")
+  latitude     Float
+  longitude    Float
+  openingTime  String?
+  closingTime  String?
+  isOpen       Boolean          @default(true)
+  timezone     String           @default("America/Santo_Domingo")
+  manualOverrideUntil DateTime?
+  logo         String?
+  banner       String?
+  photos       String[]
+  rating       Float            @default(0.0)
+  totalReviews Int              @default(0)
+  totalOrders  Int              @default(0)
+  avgPrepTimeMinutes Int        @default(15)
+  deliveryRadius     Float      @default(10.0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  isPrimary    Boolean          @default(false)
+  isVerified   Boolean          @default(false)
+  verifiedAt   DateTime?
+  documents    BodegaDocument[]
+  owner        BodegaOwner      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  favorites    Favorite[]
+  orders       Order[]
+  products     Product[]
+  reviews      Review[]
+
+  @@index([ownerId])
+  @@index([latitude, longitude])
+  @@map("bodegas")
+}
+
+model BodegaDocument {
+  id              String         @id @default(uuid())
+  bodegaId        String
+  type            DocumentType
+  fileUrl         String
+  fileName        String
+  fileSize        Int
+  mimeType        String
+  status          DocumentStatus @default(PENDING)
+  reviewedAt      DateTime?
+  reviewedById    String?        @map("reviewed_by_id")
+  rejectionReason String?
+  expiresAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  bodega          Bodega         @relation(fields: [bodegaId], references: [id], onDelete: Cascade)
+  reviewedBy      User?          @relation("BodegaDocumentReviewer", fields: [reviewedById], references: [id])
+
+  @@index([bodegaId])
+  @@index([type])
+  @@index([status])
+  @@index([reviewedById])
+  @@map("bodega_documents")
+}
+
+model Category {
+  id           String                @id @default(uuid())
+  name         String                @unique
+  description  String?
+  imageUrl     String?
+  isActive     Boolean               @default(true)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  products     Product[]
+  translations CategoryTranslation[]
+
+  @@map("categories")
+}
+
+model CategoryTranslation {
+  id         String   @id @default(uuid())
+  categoryId String
+  locale     String   // "es", "en", "fr", etc.
+  name       String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, locale])
+  @@index([categoryId])
+  @@index([locale])
+  @@map("category_translations")
+}
+
+model Product {
+  id               String      @id @default(uuid())
+  bodegaId         String
+  categoryId       String
+  name             String
+  description      String?
+  subcategory      String?
+  price            Float
+  discountPrice    Float?
+  originalPrice    Float?       // Price in the bodega's local currency
+  originalCurrency String?      // Currency code (DOP, EUR, etc.)
+  stock            Int          @default(0)
+  isAvailable      Boolean      @default(true)
+  images           String[]
+  unit             String?
+  weight           Float?
+  barcode          String?
+  isBundle         Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  orderItems       OrderItem[]
+  bodega           Bodega       @relation(fields: [bodegaId], references: [id], onDelete: Cascade)
+  category         Category     @relation(fields: [categoryId], references: [id])
+  bundleItems      BundleItem[] @relation("BundleToItems")
+  partOfBundles    BundleItem[] @relation("ProductInBundles")
+
+  @@index([bodegaId])
+  @@index([categoryId])
+  @@index([barcode])
+  @@map("products")
+}
+
+model Order {
+  id                  String      @id @default(uuid())
+  orderNumber         String      @unique
+  clientId            String
+  bodegaId            String
+  deliveryId          String?     @unique
+  addressId           String
+  status              OrderStatus @default(PLACED)
+  subtotal            Float
+  deliveryFee         Float
+  tax                 Float
+  discount            Float       @default(0)
+  total               Float
+  displayCurrency     String      @default("USD")
+  exchangeRate        Float       @default(1.0)
+  displayTotal        Float?
+  displaySubtotal     Float?
+  displayDeliveryFee  Float?
+  specialInstructions String?
+  cancellationReason  String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  acceptedAt          DateTime?
+  completedAt         DateTime?
+  cancelledAt         DateTime?
+  items               OrderItem[]
+  address             Address     @relation(fields: [addressId], references: [id])
+  bodega              Bodega      @relation(fields: [bodegaId], references: [id])
+  client              Client      @relation(fields: [clientId], references: [id])
+  delivery            Delivery?   @relation(fields: [deliveryId], references: [id])
+  payment             Payment?
+  review              Review?
+
+  @@index([clientId])
+  @@index([bodegaId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String   @id @default(uuid())
+  orderId      String
+  productId    String
+  quantity     Int
+  unitPrice    Float
+  subtotal     Float
+  productName  String
+  productImage String?
+  isBundle     Boolean  @default(false)
+  bundleItems  Json?
+  createdAt    DateTime @default(now())
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model BundleItem {
+  id          String   @id @default(uuid())
+  bundleId    String
+  productId   String
+  quantity    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  bundle      Product  @relation("BundleToItems", fields: [bundleId], references: [id], onDelete: Cascade)
+  product     Product  @relation("ProductInBundles", fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([bundleId, productId])
+  @@index([bundleId])
+  @@index([productId])
+  @@map("bundle_items")
+}
+
+model Payment {
+  id              String        @id @default(uuid())
+  orderId         String        @unique
+  amount          Float
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  transactionId   String?       @unique
+  stripePaymentId String?
+  paypalOrderId   String?
+  venmoId         String?
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  completedAt     DateTime?
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@map("payments")
+}
+
+model DeliveryPerson {
+  id                       String                   @id @default(uuid())
+  userId                   String                   @unique
+  isVerified               Boolean                  @default(false)
+  verifiedAt               DateTime?
+  documentId               String?
+  documentImage            String?
+  vehicleType              String?
+  vehiclePlate             String?
+  vehicleColor             String?
+  paypalEmail              String?
+  stripeAccountId          String?
+  stripeConnectStatus      StripeConnectStatus      @default(NOT_CONNECTED)
+  stripeOnboardingComplete Boolean                  @default(false)
+  bankAccount              String?
+  preferredPayoutMethod    PayoutMethod             @default(STRIPE)
+  rating                   Float                    @default(0.0)
+  totalDeliveries          Int                      @default(0)
+  completionRate           Float                    @default(0.0)
+  isAvailable              Boolean                  @default(false)
+  currentLat               Float?
+  currentLng               Float?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  vehiclePhoto             String?
+  vehiclePlatePhoto        String?
+  deliveries               Delivery[]
+  reviews                  Review[]
+  documents                DeliveryPersonDocument[]
+  earnings                 Earning[]
+  payouts                  Payout[]
+  user                     User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([isAvailable])
+  @@index([currentLat, currentLng])
+  @@map("delivery_persons")
+}
+
+model Delivery {
+  id                String         @id @default(uuid())
+  deliveryPersonId  String
+  status            DeliveryStatus @default(ASSIGNED)
+  pickupLat         Float
+  pickupLng         Float
+  dropoffLat        Float
+  dropoffLng        Float
+  currentLat        Float?
+  currentLng        Float?
+  estimatedDistance Float?
+  actualDistance    Float?
+  estimatedTime     Int?
+  signature         String?
+  photo             String?
+  pickupPhoto       String?
+  notes             String?
+  fee               Float
+  tip               Float          @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  assignedAt        DateTime?
+  pickedUpAt        DateTime?
+  deliveredAt       DateTime?
+  cancelledAt       DateTime?
+  deliveryPerson    DeliveryPerson @relation(fields: [deliveryPersonId], references: [id])
+  order             Order?
+
+  @@index([deliveryPersonId])
+  @@index([status])
+  @@map("deliveries")
+}
+
+model DeliveryPersonDocument {
+  id                 String         @id @default(uuid())
+  deliveryPersonId   String
+  type               DeliveryDocumentType
+  fileUrl            String
+  fileName           String
+  fileSize           Int
+  mimeType           String
+  status             DocumentStatus @default(PENDING)
+  reviewedAt         DateTime?
+  reviewedById       String?        @map("reviewed_by_id")
+  rejectionReason    String?
+  expiresAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  deliveryPerson     DeliveryPerson @relation(fields: [deliveryPersonId], references: [id], onDelete: Cascade)
+  reviewedBy         User?          @relation("DeliveryDocumentReviewer", fields: [reviewedById], references: [id])
+
+  @@index([deliveryPersonId])
+  @@index([type])
+  @@index([status])
+  @@index([reviewedById])
+  @@map("delivery_person_documents")
+}
+
+model Review {
+  id               String          @id @default(uuid())
+  clientId         String
+  bodegaId         String
+  orderId          String          @unique
+  deliveryPersonId String?
+  rating           Int
+  deliveryRating   Int?
+  comment          String?
+  response         String?
+  respondedAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  bodega           Bodega          @relation(fields: [bodegaId], references: [id], onDelete: Cascade)
+  client           Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  order            Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deliveryPerson   DeliveryPerson? @relation(fields: [deliveryPersonId], references: [id], onDelete: SetNull)
+
+  @@unique([clientId, orderId])
+  @@index([clientId])
+  @@index([bodegaId])
+  @@index([orderId])
+  @@index([deliveryPersonId])
+  @@map("reviews")
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  clientId  String
+  bodegaId  String
+  createdAt DateTime @default(now())
+  bodega    Bodega   @relation(fields: [bodegaId], references: [id], onDelete: Cascade)
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, bodegaId])
+  @@index([clientId])
+  @@map("favorites")
+}
+
+model Notification {
+  id            String    @id @default(uuid())
+  userId        String
+  title         String
+  body          String
+  type          String
+  targetAppType String?   @map("target_app_type")
+  data          Json?
+  isRead        Boolean   @default(false)
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([userId, targetAppType])
+  @@map("notifications")
+}
+
+model EmailOtp {
+  id        String   @id @default(uuid())
+  email     String
+  code      String
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("email_otps")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  email     String
+  hashedOtp String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@map("password_reset_tokens")
+}
+
+enum UserRole {
+  CLIENT
+  BODEGA_OWNER
+  DELIVERY_PERSON
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+}
+
+enum OrderStatus {
+  // Main order flow
+  PLACED                      // Order received, payment authorized
+  PENDING_STORE_CONFIRMATION  // Waiting for store to accept
+  ACCEPTED                    // Store accepted the order
+  PREPARING                   // Store is preparing items
+  READY_FOR_PICKUP            // Order ready, waiting for courier
+  COURIER_ASSIGNED            // Delivery courier assigned
+  PICKING_UP                  // Courier picking up items
+  ON_THE_WAY                  // Courier en route to customer
+  DELIVERED                   // Order delivered successfully
+  
+  // Special/Edge statuses
+  PARTIALLY_CANCELLED         // Some items/stores cancelled
+  CANCELLED                   // Order fully cancelled
+  DELAYED                     // Order delayed (weather, traffic, etc.)
+  REFUNDED                    // Payment refunded
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  DEBIT_CARD
+  PAYPAL
+  VENMO
+  CASH
+}
+
+enum DeliveryStatus {
+  AVAILABLE
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum DocumentType {
+  BUSINESS_LICENSE
+  EIN
+  OWNER_ID
+  BANK_INFORMATION
+  SALES_TAX_PERMIT
+  FOOD_SERVICE_PERMIT
+  HEALTH_INSPECTION_REPORT
+  LIQUOR_LICENSE
+  TOBACCO_LICENSE
+  AGE_VERIFICATION_DECLARATION
+}
+
+enum DeliveryDocumentType {
+  DRIVER_LICENSE
+  VEHICLE_REGISTRATION
+  VEHICLE_INSURANCE
+  BACKGROUND_CHECK
+  PROFILE_PHOTO
+  VEHICLE_PHOTO
+  VEHICLE_PLATE_PHOTO
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model SystemSettings {
+  id                       String   @id @default(uuid())
+  taxRate                  Float    @default(0.0)
+  baseDeliveryFee          Float    @default(2.99)
+  perKmDeliveryFee         Float    @default(0.5)
+  platformCommission       Float    @default(10.0)
+  deliveryPersonCommission Float    @default(80.0) // Percentage of delivery fee that goes to delivery person
+  enabledPaymentMethods    String[] @default(["CREDIT_CARD", "DEBIT_CARD", "CASH"])
+  maintenanceMode          Boolean  @default(false)
+
+  // Payout scheduling
+  payoutEnabled            Boolean  @default(true)           // Global on/off for scheduled payouts
+  payoutFrequency          String   @default("weekly")       // daily | weekly | biweekly | monthly | manual
+  payoutDayOfWeek          Int      @default(1)              // 0=Sun … 6=Sat; used for weekly/biweekly
+  payoutMinimumAmount      Float    @default(10.0)           // Minimum pending amount to trigger auto-payout
+
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+// Earnings model to track money owed to bodegueros and delivery persons
+model Earning {
+  id               String         @id @default(uuid())
+  orderId          String
+  bodegaOwnerId    String?
+  deliveryPersonId String?
+  type             EarningType
+  amount           Float          // Amount earned (in dollars)
+  platformFee      Float          // Platform commission taken
+  netAmount        Float          // Net amount after platform fee
+  status           EarningStatus  @default(PENDING)
+  payoutId         String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  bodegaOwner      BodegaOwner?    @relation(fields: [bodegaOwnerId], references: [id])
+  deliveryPerson   DeliveryPerson? @relation(fields: [deliveryPersonId], references: [id])
+  payout           Payout?         @relation(fields: [payoutId], references: [id])
+
+  @@index([bodegaOwnerId])
+  @@index([deliveryPersonId])
+  @@index([status])
+  @@index([orderId])
+  @@map("earnings")
+}
+
+// Payouts model to track transfers to bodegueros and delivery persons
+model Payout {
+  id               String         @id @default(uuid())
+  bodegaOwnerId    String?
+  deliveryPersonId String?
+  amount           Float          // Total payout amount (in dollars)
+  currency         String         @default("usd")
+  status           PayoutStatus   @default(PENDING)
+  payoutMethod     PayoutMethod   @default(STRIPE)
+  stripeTransferId String?        // Stripe transfer ID
+  stripePayoutId   String?        // Stripe payout ID (if instant payout)
+  failureReason    String?
+  processedAt      DateTime?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  bodegaOwner      BodegaOwner?    @relation(fields: [bodegaOwnerId], references: [id])
+  deliveryPerson   DeliveryPerson? @relation(fields: [deliveryPersonId], references: [id])
+  earnings         Earning[]
+
+  @@index([bodegaOwnerId])
+  @@index([deliveryPersonId])
+  @@index([status])
+  @@map("payouts")
+}
+
+enum StripeConnectStatus {
+  NOT_CONNECTED
+  PENDING
+  ACTIVE
+  RESTRICTED
+  DISABLED
+}
+
+enum EarningType {
+  ORDER_SALE       // Bodeguero earning from product sales
+  DELIVERY_FEE     // Delivery person earning from delivery
+  TIP              // Tips for delivery person
+}
+
+enum EarningStatus {
+  PENDING          // Order completed, waiting for payout
+  PROCESSING       // Payout is being processed
+  PAID             // Payout completed
+  CANCELLED        // Order was refunded/cancelled
+}
+
+enum PayoutStatus {
+  PENDING          // Payout created, not yet processed
+  PROCESSING       // Transfer initiated
+  COMPLETED        // Transfer successful
+  FAILED           // Transfer failed
+}
+
+enum PayoutMethod {
+  STRIPE
+  PAYPAL
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}

@@ -1,0 +1,37 @@
+# Development Dockerfile with hot reload
+FROM node:20-slim
+
+WORKDIR /app
+
+# Install build dependencies for bcrypt and OpenSSL for Prisma
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy package files and config files
+COPY package*.json ./
+COPY tsconfig*.json ./
+COPY nest-cli.json ./
+COPY prisma ./prisma/
+
+# Install all dependencies (including dev)
+# Using --legacy-peer-deps due to @nestjs/swagger version conflict
+RUN npm ci --legacy-peer-deps
+
+# Generate Prisma Client
+RUN npx prisma generate
+
+# Create uploads directory
+RUN mkdir -p /app/uploads
+
+# Copy source code (will be overwritten by volume mount in dev)
+COPY src ./src/
+
+# Expose ports (app + debug)
+EXPOSE 3000 9229
+
+# Start development server with hot reload
+CMD ["npm", "run", "start:dev"]
