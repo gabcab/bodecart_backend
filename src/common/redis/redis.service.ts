@@ -11,19 +11,29 @@ export class RedisService implements OnModuleDestroy {
     const redisUrl = this.configService.get<string>('REDIS_URL') || 'redis://localhost:6379';
 
     this.client = new Redis(redisUrl, {
+      lazyConnect: true,
+      enableOfflineQueue: false,
+      maxRetriesPerRequest: 1,
       retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
+        if (times > 3) {
+          this.logger.warn('Redis unavailable — running without cache (non-fatal)');
+          return null; // stop retrying
+        }
+        return Math.min(times * 200, 1000);
       },
-      maxRetriesPerRequest: 3,
     });
 
     this.client.on('connect', () => {
       this.logger.log('Connected to Redis');
     });
 
-    this.client.on('error', (error) => {
-      this.logger.error('Redis connection error:', error);
+    this.client.on('error', () => {
+      // Silenced after first few attempts — already warned via retryStrategy
+    });
+
+    // Attempt connection but don't block startup
+    this.client.connect().catch(() => {
+      this.logger.warn('Redis not available — caching disabled for this session');
     });
   }
 
