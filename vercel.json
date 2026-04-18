@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
+  "buildCommand": "prisma generate && npm run build",
   "outputDirectory": "dist",
   "functions": {
     "api/index.ts": {
@@ -9,6 +9,9 @@
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index.ts" }
+    {
+      "source": "/(.*)",
+      "destination": "/api/index.ts"
+    }
   ]
 }
